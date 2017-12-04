@@ -77,10 +77,10 @@ def baseline(wavfile, outfile, src, trg, fft_size=FFT_SIZE):
     sample = extract(wavfile)
     sp_dim = fft_size // 2 + 1
     sample_converted = np.concatenate((sample[:,:sp_dim*2], convert_f0(sample[:,sp_dim*2],\
-		    src, trg).reshape(-1,1), sample[:,sp_dim*2+1].reshape(-1,1)), axis=1) 
+		    src, trg).reshape(-1,1), sample[:,sp_dim*2+1].reshape(-1,1)), axis=1)
     librosa.output.write_wav(outfile, pw2wav(sample_converted), sr=16000)
 
 if __name__ == '__main__':
-    wavfile = '../segan/data/VCTK-Corpus/wav48/p226/p226_006.wav'
-    outfile = 'p226_006_p225_006.wav'
+    wavfile = 'data/VCTK-Corpus/wav48/p226/p226_006.wav'
+    outfile = 'test/p226_006_p225_006.wav'
     baseline(wavfile, outfile, (4.8286185, 0.16229385), (5.2577271, 0.15516736))

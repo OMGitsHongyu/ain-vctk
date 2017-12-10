@@ -1,13 +1,16 @@
 import sys
 import os
 import numpy as np
+import glob
+from sklearn.model_selection import train_test_split
 import librosa
 import pyworld as pw
+import tensorflow as tf
 
 FFT_SIZE = 1024
 EPSILON = 1e-10
-#FEAT_DIM = SP_DIM + SP_DIM + 1 + 1 + 1  # [sp, ap, f0, en, s]
-
+SP_DIM = 513
+FEAT_DIM = SP_DIM + SP_DIM + 1 + 1 + 1  # [sp, ap, f0, en, s]
 
 def wav2pw(x, fs=16000, fft_size=FFT_SIZE):
     ''' Extract WORLD feature from waveform '''
@@ -52,7 +55,7 @@ def extract(wavfile, fft_size=FFT_SIZE, dtype=np.float32):
     ''' Basic (WORLD) feature extraction '''
     if isinstance(wavfile, str):
     	x, _ = librosa.load(wavfile, sr=16000, mono=True, dtype=np.float64)
-    elif isinstance(filename, np.ndarray):
+    elif isinstance(wavfile, np.ndarray):
 	x = wavfile
     else:
 	raise ValueError('input wavfile must be either filename or numpy.ndarray')
@@ -72,6 +75,258 @@ def convert_f0(f0, src, trg):
     lf0 = np.where(lf0 > 1., np.exp(lf0), lf0)
     return lf0
 
+#------------------------save audios to binary files-----------------------------
+def find_paired_files(dir_to_source, target, sources=range(225,251), test=0.25):
+    '''Finds all training (data and label) files matching the pattern.'''
+    label_files = glob.glob(dir_to_source+'/txt/'+'p'+str(target)+'/*')
+
+    text_label = {}
+    for label_file in label_files:
+        with open(label_file, 'r') as fl:
+            text_label[fl.read().lstrip().rstrip()] = dir_to_source+'/wav48/'+'p'+str(target)+'/'+label_file.split('/')[-1][:-4]+'.wav'
+
+    train_idx, test_idx = train_test_split(text_label.items(), test_size=test)
+    train_label, test_label = dict(train_idx), dict(test_idx)
+    train_wav, test_wav = [], []
+    for insider in [i for i in sources if i != target]:
+        train_files = glob.glob(dir_to_source+'/txt/'+'p'+str(insider)+'/*')
+        for train_file in train_files:
+            with open(train_file, 'r') as ft:
+                text = ft.read().lstrip().rstrip()
+                if text in train_label:
+                    train_audio = dir_to_source+'/wav48/'+'p'+str(insider)+'/'+train_file.split('/')[-1][:-4]+'.wav'
+                    train_wav.append((train_audio, text_label[text]))
+                if text in test_label:
+                    train_audio = dir_to_source+'/wav48/'+'p'+str(insider)+'/'+train_file.split('/')[-1][:-4]+'.wav'
+                    test_wav.append((train_audio, text_label[text]))
+    return train_wav, test_wav
+
+
+def extract_and_save_bin_to(dir_to_bin, dir_to_source, target, top_db=20, sources=range(225,230), test=0.25):
+    train_pairs, test_pairs = find_paired_files(dir_to_source, target)
+    print('{} wavs in training set and {} wavs in test set'.format(len(train_pairs), len(test_pairs)))
+    label_set = set()
+    train_set, test_set = [], []
+    if os.path.exists(dir_to_bin):
+        os.system('rm -rf '+dir_to_bin)
+    os.makedirs(dir_to_bin)
+    os.makedirs(dir_to_bin+'/train/')
+    os.makedirs(dir_to_bin+'/test/')
+    os.makedirs(dir_to_bin+'/label/')
+    os.makedirs(dir_to_bin+'/etc/')
+    for wav_pair in train_pairs:
+        output_filename = os.path.splitext(wav_pair[0])[0].split('/')[-1]
+	label_filename = os.path.splitext(wav_pair[1])[0].split('/')[-1]
+        label_set.add(wav_pair[1])
+        output_file = os.path.join(dir_to_bin+'/train/', '{}.bin'.format(output_filename))
+	label_file = os.path.join(dir_to_bin+'/label/', '{}.bin'.format(label_filename))
+	train_set.append((output_file, label_file))
+        if os.path.exists(output_file):
+            print('{} already exists'.format(output_file))
+        else:
+            print('Process {}'.format(output_file))
+            wave, _ = librosa.load(wav_pair[0], sr=16000, dtype=np.float64)
+            wave_trim, _ = librosa.effects.trim(wave, top_db=top_db)
+            features = extract(wave_trim)
+            speaker = int(output_filename.split('_')[0][1:]) * np.ones((features.shape[0],1),np.float32)
+            features = np.concatenate([features, speaker], 1)
+            print('features', features.shape)                        
+            with open(output_file, 'wb') as fp:
+                fp.write(features.tostring())
+    for wav_pair in test_pairs:
+        output_filename = os.path.splitext(wav_pair[0])[0].split('/')[-1]
+	label_filename = os.path.splitext(wav_pair[1])[0].split('/')[-1]
+        label_set.add(wav_pair[1])
+        output_file = os.path.join(dir_to_bin+'/test/', '{}.bin'.format(output_filename))
+	label_file = os.path.join(dir_to_bin+'/label/', '{}.bin'.format(label_filename))
+	test_set.append((output_file, label_file))
+        if os.path.exists(output_file):
+            print('{} already exists'.format(output_file))
+        else:
+            print('Process {}'.format(output_file))
+            wave, _ = librosa.load(wav_pair[0], sr=16000, dtype=np.float64)
+            wave_trim, _ = librosa.effects.trim(wave, top_db=top_db)
+            features = extract(wave_trim)
+            speaker = int(output_filename.split('_')[0][1:]) * np.ones((features.shape[0],1),np.float32)
+            features = np.concatenate([features, speaker], 1)
+            print('features', features.shape)                        
+            with open(output_file, 'wb') as fp:
+                fp.write(features.tostring())
+    print('{} wavs in label set'.format(len(label_set)))
+    for label_file in label_set:
+        output_filename = os.path.splitext(label_file)[0].split('/')[-1]
+        output_file = os.path.join(dir_to_bin+'/label/', '{}.bin'.format(output_filename))
+        if os.path.exists(output_file):
+            print('{} already exists'.format(output_file))
+        else:
+            print('Process {}'.format(output_file))
+            wave, _ = librosa.load(label_file, sr=16000, dtype=np.float64)
+            wave_trim, _ = librosa.effects.trim(wave, top_db=top_db)
+            features = extract(wave_trim)
+            speaker = int(output_filename.split('_')[0][1:]) * np.ones((features.shape[0],1),np.float32)
+            features = np.concatenate([features, speaker], 1)
+            print('features', features.shape)                        
+            with open(output_file, 'wb') as fp:
+                fp.write(features.tostring())
+
+    with open(dir_to_bin+'/etc/train_map.txt', 'w') as fp:
+        for filename_pair in train_set:
+            fp.write(filename_pair[0]+','+filename_pair[1]+'\n')
+
+    with open(dir_to_bin+'/etc/test_map.txt', 'w') as fp:
+        for filename_pair in test_set:
+            fp.write(filename_pair[0]+','+filename_pair[1]+'\n')
+        
+def save_pair_to(dir_to_pair, map_txt):
+    pair_map = []
+    with open(map_txt) as fp:
+        for line in fp.readlines():
+            pair_map.append(line.rstrip().split(','))
+    print('{} wavs in the set '.format(len(pair_map)))
+    if os.path.exists(dir_to_pair):
+        os.system('rm -rf '+dir_to_pair)
+    os.system('mkdir -p '+dir_to_pair)
+    for wav_pair in pair_map:
+        output_filename = os.path.splitext(wav_pair[0])[0].split('/')[-1]+'-'+\
+                          os.path.splitext(wav_pair[1])[0].split('/')[-1]
+        output_file = os.path.join(dir_to_pair, '{}.bin'.format(output_filename))
+        if os.path.exists(output_file):
+            print('{} already exists'.format(output_file))
+        else:
+            print('Process {}'.format(output_file))
+            input_spec = np.fromfile(wav_pair[0], np.float32).reshape(-1,1029)
+            label_spec = np.fromfile(wav_pair[1], np.float32).reshape(-1,1029)
+            features = np.hstack(align_specs(input_spec, label_spec))
+            print('features', features.shape)
+            with open(output_file, 'wb') as fp:
+                fp.write(features.tostring())
+
+#---------------------------data loader------------------------------------------
+class Tanhize(object):
+    ''' Normalizing `x` to [-1, 1] '''
+    def __init__(self, xmin, xmax):
+        self.xmin = xmin
+        self.xmax = xmax
+        self.xscale = xmax - xmin
+    
+    def forward_process(self, x):
+        x = (x - self.xmin) / self.xscale
+        if isinstance(x, np.ndarray):
+            return np.clip(x, 0., 1.) * 2. - 1.
+        elif isinstance(x, tf.tensor):
+            return tf.clip_by_value(x, 0., 1.) * 2. - 1.
+        else:
+            raise TypeError('No such type {}'.format(type(x)))
+
+    def backward_process(self, x):
+        return (x * .5 + .5) * self.xscale + self.xmin
+
+
+def read_pair(
+    file_pattern,
+    batch_size,
+    record_lines=128,
+    capacity=256,
+    min_after_dequeue=128,
+    num_threads=8,
+    format='NCHW',
+    normalizer=None,
+    ):
+    ''' 
+    '''
+    with tf.name_scope('InputSpectralFrame'):
+        files = tf.gfile.Glob(file_pattern)
+        filename_queue = tf.train.string_input_producer(files)
+
+        record_bytes = FEAT_DIM * 2 * 4 * record_lines
+        reader = tf.FixedLengthRecordReader(record_bytes)
+        _, value = reader.read(filename_queue)
+        value = tf.decode_raw(value, tf.float32)
+
+        value = tf.reshape(value, [record_lines, 2*FEAT_DIM])
+        feature = value[:,:SP_DIM]
+        label = value[:,FEAT_DIM:SP_DIM+FEAT_DIM]
+        
+        feature = normalizer.forward_process(feature)
+        label = normalizer.forward_process(label)
+            
+        if format == 'NCHW':
+            feature = tf.reshape(feature, [-1, SP_DIM, 1])
+            label = tf.reshape(label, [-1, SP_DIM, 1])
+        elif format == 'NHWC':
+            feature = tf.reshape(feature, [SP_DIM, -1, 1])
+            label = tf.reshape(label, [SP_DIM, -1, 1])
+        else:
+            pass
+
+        return tf.train.shuffle_batch(
+            [feature, label],
+            batch_size,
+            capacity=capacity,
+            min_after_dequeue=min_after_dequeue,
+            num_threads=num_threads,
+            allow_smaller_final_batch=True,
+            # enqueue_many=True,
+            )
+
+def read_pair_single_numpy(
+    filename,
+    record_lines=256,
+    normalizer=None,
+    ):
+    ''' 
+    '''
+    input_with_label = np.fromfile(filename, np.float32).reshape(-1, 2*FEAT_DIM)
+    input_with_label_pad = np.zeros((record_lines,2*FEAT_DIM), np.float32)
+    if input_with_label.shape[0] < record_lines:
+        input_with_label_pad[:input_with_label.shape[0],:] =\
+        input_with_label[:input_with_label.shape[0],:]
+    else:
+        input_with_label_pad[:record_lines,:] = input_with_label[:record_lines,:]
+    feature, label = input_with_label_pad[:,:SP_DIM], input_with_label_pad[:,FEAT_DIM:SP_DIM+FEAT_DIM]
+    if normalizer:
+        feature = normalizer.forward_process(feature)
+        label = normalizer.forward_process(label)
+    return feature, label
+
+def read_pair_batch_numpy(filenames, record_lines=256, normalizer=None):
+    ''' 
+    '''
+    batch_inputs = [read_pair_single_numpy(filename, record_lines=record_lines, \
+                                           normalizer=normalizer)[0] for filename in filenames]
+    batch_labels = [read_pair_single_numpy(filename, record_lines=record_lines, \
+                                           normalizer=normalizer)[1] for filename in filenames]
+    return np.expand_dims(np.array(batch_inputs).astype(np.float32), axis=3),\
+	   np.expand_dims(np.array(batch_labels).astype(np.float32), axis=3)
+#---------------------------alignments-------------------------------------------
+def read_whole_features(file_pattern, num_epochs=1):
+    '''
+    Return
+        `feature`: `dict` whose keys are `sp`, `ap`, `f0`, `en`, `speaker`
+    '''
+    files = tf.gfile.Glob(file_pattern)
+    print('{} files found'.format(len(files)))
+    filename_queue = tf.train.string_input_producer(files, num_epochs=num_epochs)
+    reader = tf.WholeFileReader()
+    key, value = reader.read(filename_queue)
+    print("Processing {}".format(key))
+    value = tf.decode_raw(value, tf.float32)
+    value = tf.reshape(value, [-1, FEAT_DIM])
+    return {
+        'sp': value[:, :SP_DIM],
+        'ap': value[:, SP_DIM : 2*SP_DIM],
+        'f0': value[:, SP_DIM * 2],
+        'en': value[:, SP_DIM * 2 + 1],
+        'speaker': tf.cast(value[:, SP_DIM * 2 + 2], tf.int64),
+        'filename': key,
+	}
+
+def align_specs(specfile1, specfile2, feat_dim=1026):
+    distance, path = librosa.core.dtw(specfile1[:,:feat_dim].T, specfile2[:,:feat_dim].T)
+    return specfile1[path[::-1,0],:], specfile2[path[::-1,1],:]
+
+
+
 def baseline(wavfile, outfile, src, trg, fft_size=FFT_SIZE):
     ''' A baseline convertion from one person to another '''
     sample = extract(wavfile)
@@ -81,6 +336,9 @@ def baseline(wavfile, outfile, src, trg, fft_size=FFT_SIZE):
     librosa.output.write_wav(outfile, pw2wav(sample_converted), sr=16000)
 
 if __name__ == '__main__':
-    wavfile = 'data/VCTK-Corpus/wav48/p226/p226_006.wav'
-    outfile = 'test/p226_006_p225_006.wav'
-    baseline(wavfile, outfile, (4.8286185, 0.16229385), (5.2577271, 0.15516736))
+#    wavfile = 'data/VCTK-Corpus/wav48/p226/p226_006.wav'
+#    outfile = 'test/p226_006_p225_006.wav'
+#    baseline(wavfile, outfile, (4.8286185, 0.16229385), (5.2577271, 0.15516736))
+    extract_and_save_bin_to('data/matrix_sample/225', 'data/matrix_sample/', 225)
+    save_pair_to('data/matrix_sample/225/pair/train', './data/matrix_sample/225/etc/train_map.txt')
+    save_pair_to('data/matrix_sample/225/pair/test', './data/matrix_sample/225/etc/test_map.txt')

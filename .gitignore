@@ -68,6 +68,7 @@ docs/_build/
 target/
 
 # Jupyter Notebook
+.ipynb
 .ipynb_checkpoints
 
 # pyenv
@@ -104,3 +105,8 @@ ENV/
 .wav
 data/
 test/
+
+# check points
+checkpoint*/
+logs*/
+samples*/

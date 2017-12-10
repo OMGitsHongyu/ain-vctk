@@ -1,4 +1,6 @@
 import sys
+sys.path.remove('/home/hongyuz/.local/lib/python2.7/site-packages')
+sys.path.append('/home/hongyuz/.local/lib/python2.7/site-packages')
 import os
 import numpy as np
 import glob
@@ -79,7 +81,6 @@ def convert_f0(f0, src, trg):
 def find_paired_files(dir_to_source, target, sources=range(225,251), test=0.25):
     '''Finds all training (data and label) files matching the pattern.'''
     label_files = glob.glob(dir_to_source+'/txt/'+'p'+str(target)+'/*')
-
     text_label = {}
     for label_file in label_files:
         with open(label_file, 'r') as fl:
@@ -102,8 +103,8 @@ def find_paired_files(dir_to_source, target, sources=range(225,251), test=0.25):
     return train_wav, test_wav
 
 
-def extract_and_save_bin_to(dir_to_bin, dir_to_source, target, top_db=20, sources=range(225,230), test=0.25):
-    train_pairs, test_pairs = find_paired_files(dir_to_source, target)
+def extract_and_save_bin_to(dir_to_bin, dir_to_source, target, top_db=20, sources=range(225,251), test=0.25):
+    train_pairs, test_pairs = find_paired_files(dir_to_source, target, sources=sources, test=test)
     print('{} wavs in training set and {} wavs in test set'.format(len(train_pairs), len(test_pairs)))
     label_set = set()
     train_set, test_set = [], []
@@ -339,6 +340,13 @@ if __name__ == '__main__':
 #    wavfile = 'data/VCTK-Corpus/wav48/p226/p226_006.wav'
 #    outfile = 'test/p226_006_p225_006.wav'
 #    baseline(wavfile, outfile, (4.8286185, 0.16229385), (5.2577271, 0.15516736))
-    extract_and_save_bin_to('data/matrix_sample/225', 'data/matrix_sample/', 225)
-    save_pair_to('data/matrix_sample/225/pair/train', './data/matrix_sample/225/etc/train_map.txt')
-    save_pair_to('data/matrix_sample/225/pair/test', './data/matrix_sample/225/etc/test_map.txt')
+# pc use only
+#    extract_and_save_bin_to('data/matrix_sample/225', 'data/matrix_sample/', 225)
+#    save_pair_to('data/matrix_sample/225/pair/train', './data/matrix_sample/225/etc/train_map.txt')
+#    save_pair_to('data/matrix_sample/225/pair/test', './data/matrix_sample/225/etc/test_map.txt')
+# matrix use
+    dir_to_src = '/media/katefgroup/VCTK_data/VCTK-Corpus/'
+    dir_to_bin = 'data/225/'
+    extract_and_save_bin_to(dir_to_bin, dir_to_src, 225)
+    save_pair_to('data/225/pair/train', './data/225/etc/train_map.txt')
+    save_pair_to('data/225/pair/test', './data/225/etc/test_map.txt')

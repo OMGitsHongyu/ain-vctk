@@ -1,6 +1,9 @@
 import sys
-sys.path.remove('/home/hongyuz/.local/lib/python2.7/site-packages')
-sys.path.append('/home/hongyuz/.local/lib/python2.7/site-packages')
+try:
+    sys.path.remove('/home/hongyuz/.local/lib/python2.7/site-packages')
+    sys.path.append('/home/hongyuz/.local/lib/python2.7/site-packages')
+except ValueError:
+    pass
 import os
 import numpy as np
 import glob
@@ -70,12 +73,29 @@ def extract(wavfile, fft_size=FFT_SIZE, dtype=np.float32):
     return np.concatenate([sp, ap, f0, en], axis=1).astype(dtype)
 
 def convert_f0(f0, src, trg):
-    mu_s, std_s = src
-    mu_t, std_t = trg
+    if isinstance(src, (list, tuple)):
+        mu_s, std_s = src
+    elif isinstance(src, (float, np.float32, int, np.int32, np.int64, str)):
+        mu_s, std_s = np.fromfile(os.path.join('./etc', '{}.npf'.format(src)), np.float32)
+    else:
+        raise TypeError('src must be numeric, string or tuple/list, got {}'.format(type(src)))
+    if isinstance(trg, (list, tuple)):
+        mu_t, std_t = trg
+    elif isinstance(trg, (float, np.float32, int, np.int32, np.int64, str)):
+        mu_t, std_t = np.fromfile(os.path.join('./etc', '{}.npf'.format(trg)), np.float32)
+    else:
+        raise TypeError('trg must be numeric string or tuple/list, got {}'.format(type(trg)))
     lf0 = np.where(f0 > 1., np.log(f0), f0)
     lf0 = np.where(lf0 > 1., (lf0 - mu_s)/std_s * std_t + mu_t, lf0)
     lf0 = np.where(lf0 > 1., np.exp(lf0), lf0)
     return lf0
+
+def convert_feature(spec, other_feature, src, trg, normalizer=None):
+    if normalizer:
+        spec = normalizer.backward_process(spec)
+    f0 = convert_f0(other_feature[:,-3], src, trg)
+    print other_feature[:,-3], f0
+    return np.hstack((spec, other_feature[:,:-3], f0.reshape(-1,1), other_feature[:,-2].reshape(-1,1)))
 
 #------------------------save audios to binary files-----------------------------
 def find_paired_files(dir_to_source, target, sources=range(225,251), test=0.25):
@@ -131,7 +151,7 @@ def extract_and_save_bin_to(dir_to_bin, dir_to_source, target, top_db=20, source
             features = extract(wave_trim)
             speaker = int(output_filename.split('_')[0][1:]) * np.ones((features.shape[0],1),np.float32)
             features = np.concatenate([features, speaker], 1)
-            print('features', features.shape)                        
+            print('features', features.shape)
             with open(output_file, 'wb') as fp:
                 fp.write(features.tostring())
     for wav_pair in test_pairs:
@@ -150,7 +170,7 @@ def extract_and_save_bin_to(dir_to_bin, dir_to_source, target, top_db=20, source
             features = extract(wave_trim)
             speaker = int(output_filename.split('_')[0][1:]) * np.ones((features.shape[0],1),np.float32)
             features = np.concatenate([features, speaker], 1)
-            print('features', features.shape)                        
+            print('features', features.shape)
             with open(output_file, 'wb') as fp:
                 fp.write(features.tostring())
     print('{} wavs in label set'.format(len(label_set)))
@@ -166,7 +186,7 @@ def extract_and_save_bin_to(dir_to_bin, dir_to_source, target, top_db=20, source
             features = extract(wave_trim)
             speaker = int(output_filename.split('_')[0][1:]) * np.ones((features.shape[0],1),np.float32)
             features = np.concatenate([features, speaker], 1)
-            print('features', features.shape)                        
+            print('features', features.shape)
             with open(output_file, 'wb') as fp:
                 fp.write(features.tostring())
 
@@ -177,7 +197,7 @@ def extract_and_save_bin_to(dir_to_bin, dir_to_source, target, top_db=20, source
     with open(dir_to_bin+'/etc/test_map.txt', 'w') as fp:
         for filename_pair in test_set:
             fp.write(filename_pair[0]+','+filename_pair[1]+'\n')
-        
+
 def save_pair_to(dir_to_pair, map_txt):
     pair_map = []
     with open(map_txt) as fp:
@@ -270,7 +290,7 @@ def read_pair(
             # enqueue_many=True,
             )
 
-def read_pair_single_numpy(filename, record_lines=256, normalizer=None):
+def read_pair_single_numpy(filename, record_lines=256, normalizer=None, fields='sp'):
     ''' 
     '''
     input_with_label = np.fromfile(filename, np.float32).reshape(-1, 2*FEAT_DIM)
@@ -280,21 +300,37 @@ def read_pair_single_numpy(filename, record_lines=256, normalizer=None):
         input_with_label[:input_with_label.shape[0],:]
     else:
         input_with_label_pad[:record_lines,:] = input_with_label[:record_lines,:]
-    feature, label = input_with_label_pad[:,:SP_DIM], input_with_label_pad[:,FEAT_DIM:SP_DIM+FEAT_DIM]
-    if normalizer:
-        feature = normalizer.forward_process(feature)
-        label = normalizer.forward_process(label)
+    if fields == 'sp':
+        feature, label = input_with_label_pad[:,:SP_DIM], input_with_label_pad[:,FEAT_DIM:SP_DIM+FEAT_DIM]
+        if normalizer:
+            feature = normalizer.forward_process(feature)
+            label = normalizer.forward_process(label)
+    elif fields == 'all':
+        feature, label = input_with_label_pad[:,:FEAT_DIM], input_with_label_pad[:,FEAT_DIM:]
+        if normalizer:
+            feature = np.hstack((normalizer.forward_process(feature[:,:SP_DIM]), feature[:,SP_DIM:]))
+            label = np.hstack((normalizer.forward_process(label[:,:SP_DIM]), label[:,SP_DIM:]))
     return feature, label
 
-def read_pair_batch_numpy(filenames, record_lines=256, normalizer=None):
+def read_pair_batch_numpy(filenames, record_lines=256, normalizer=None, mode='train'):
     ''' 
     '''
-    batch_inputs = [read_pair_single_numpy(filename, record_lines=record_lines, \
-                                           normalizer=normalizer)[0] for filename in filenames]
-    batch_labels = [read_pair_single_numpy(filename, record_lines=record_lines, \
-                                           normalizer=normalizer)[1] for filename in filenames]
-    return np.expand_dims(np.array(batch_inputs).astype(np.float32), axis=3),\
+    if mode == 'train':
+        batch_inputs = [read_pair_single_numpy(filename, record_lines=record_lines, \
+                                           normalizer=normalizer, fields='sp')[0] for filename in filenames]
+        batch_labels = [read_pair_single_numpy(filename, record_lines=record_lines, \
+                                           normalizer=normalizer, fields='sp')[1] for filename in filenames]
+        return np.expand_dims(np.array(batch_inputs).astype(np.float32), axis=3),\
 	   np.expand_dims(np.array(batch_labels).astype(np.float32), axis=3)
+    elif mode == 'test':
+        batch_inputs = [read_pair_single_numpy(filename, record_lines=record_lines, \
+                                           normalizer=normalizer, fields='all')[0] for filename in filenames]
+        batch_labels = [read_pair_single_numpy(filename, record_lines=record_lines, \
+                                           normalizer=normalizer, fields='all')[1] for filename in filenames]
+        return np.expand_dims(np.array(batch_inputs[:,:,:SP_DIM]).astype(np.float32), axis=3),\
+                np.expand_dims(np.array(batch_labels[:,:,:SP_DIM]).astype(np.float32), axis=3),\
+                np.array(batch_inputs[:,:,SP_DIM:]).astype(np.float32),\
+                np.array(batch_labels[:,:,SP_DIM:]).astype(np.float32)
 
 #---------------------------alignments-------------------------------------------
 def read_whole_features(file_pattern, num_epochs=1):

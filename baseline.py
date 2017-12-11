@@ -1,3 +1,6 @@
+import sys
+sys.path.remove('/home/hongyuz/.local/lib/python2.7/site-packages')
+sys.path.append('/home/hongyuz/.local/lib/python2.7/site-packages')
 import os
 import glob
 import numpy as np
@@ -23,7 +26,6 @@ def optimistic_restore(session, save_file, graph=tf.get_default_graph()):
             restore_vars.append(curr_var)
     opt_saver = tf.train.Saver(restore_vars)
     opt_saver.restore(session, save_file)
-
 
 def lrelu(x, leak=0.2, name="lrelu"):
     with tf.variable_scope(name):
@@ -211,7 +213,7 @@ print "initialization done"
 # TRAINING
 ############
 
-data_dir = 'data/matrix_sample/225/pair/'
+data_dir = 'data/225/pair/'
 data_train = glob.glob(data_dir+"/train/*.bin")
 data_test = glob.glob(data_dir+"/test/*.bin")
 
@@ -236,8 +238,11 @@ start_time = time.time()
 counter = 0
 
 b_load = False
-ckpt_dir = 'data/matrix_sample/225/checkpoint_pair_supervised/model-60002'
+ckpt_dir = 'data/225/checkpoint_pair_supervised/model-60002'
 
+normalizer = Tanhize(
+    xmax=np.fromfile('data/225/etc/xmax.npf'),
+    xmin=np.fromfile('data/225/etc/xmin.npf'))
 
 with tf.Session() as sess:
     tf.global_variables_initializer().run()
@@ -260,7 +265,7 @@ with tf.Session() as sess:
         for idx in xrange(num_batches):
             batch_filenames = data_train[idx*batch_size : (idx+1)*batch_size]
             
-            batch_inputs, batch_origs = read_pair_batch_numpy(batch_filenames)
+            batch_inputs, batch_origs = read_pair_batch_numpy(batch_filenames, normalizer=normalizer)
             
             # update networks
             
@@ -270,25 +275,26 @@ with tf.Session() as sess:
 
             counter += 1
             print("Epoch: [%2d] [%4d/%4d] time: %4.4f, g_loss: %.8f" \
-                % (epoch, idx, num_batches,
-                    time.time() - start_time, errG))
+                % (epoch, idx, num_batches, time.time() - start_time, errG))
 
-#             if np.mod(counter, 30) == 1:
+            if np.mod(counter, 30) == 1:
 
-#                 # training metrics first
-#                 train_summary = sess.run([merged_summary_train], feed_dict={inputs: batch_inputs, real_ims: batch_origs})
-#                 train_writer.add_summary(train_summary[0], counter)
+                # training metrics first
+                train_summary = sess.run([merged_summary_train], feed_dict=\
+					{inputs:batch_inputs, real_ims:batch_origs})
+                train_writer.add_summary(train_summary[0], counter)
 
-#                 # now testing metrics
-#                 rand_idx = np.random.randint(len(data_test)-batch_size+1)
-#                 sample_origs, sample_inputs = get_images(data_test[rand_idx: rand_idx+batch_size])
+                # now testing metrics
+                rand_idx = np.random.randint(len(data_test)-batch_size+1)
+                sample_inputs, sample_origs = read_pair_batch_numpy(\
+			data_test[rand_idx: rand_idx+batch_size], normalizer=normalizer)
 
-#                 sample = sess.run([gen_test], feed_dict={inputs: sample_inputs})
+                sample = sess.run([gen_test], feed_dict={inputs: sample_inputs})
 
-#                 err_im_HR = sess.run([err_im_HR_t], feed_dict={inputs: sample_inputs, real_ims: sample_origs})
+                # err_im_HR = sess.run([err_im_HR_t], feed_dict={inputs:sample_inputs, real_ims:sample_origs})
 
-#                 test_summary = sess.run([merged_summary_test], feed_dict={ inputs: sample_inputs, real_ims: sample_origs})
-#                 test_writer.add_summary(test_summary[0], counter)
+                test_summary = sess.run([merged_summary_test], feed_dict={inputs: sample_inputs, real_ims:sample_origs})
+                test_writer.add_summary(test_summary[0], counter)
 
 #                 # save an image, with the original next to the generated one
 #                 resz_input = sample_inputs[0].repeat(axis=0,repeats=4).repeat(axis=1,repeats=4)

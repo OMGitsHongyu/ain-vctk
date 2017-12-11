@@ -270,11 +270,7 @@ def read_pair(
             # enqueue_many=True,
             )
 
-def read_pair_single_numpy(
-    filename,
-    record_lines=256,
-    normalizer=None,
-    ):
+def read_pair_single_numpy(filename, record_lines=256, normalizer=None):
     ''' 
     '''
     input_with_label = np.fromfile(filename, np.float32).reshape(-1, 2*FEAT_DIM)
@@ -299,6 +295,7 @@ def read_pair_batch_numpy(filenames, record_lines=256, normalizer=None):
                                            normalizer=normalizer)[1] for filename in filenames]
     return np.expand_dims(np.array(batch_inputs).astype(np.float32), axis=3),\
 	   np.expand_dims(np.array(batch_labels).astype(np.float32), axis=3)
+
 #---------------------------alignments-------------------------------------------
 def read_whole_features(file_pattern, num_epochs=1):
     '''

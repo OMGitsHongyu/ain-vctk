@@ -4,11 +4,11 @@ sys.path.append('/home/hongyuz/.local/lib/python2.7/site-packages')
 import numpy as np
 import pyworld as pw
 import tensorflow as tf
-from analyzer import pw2wav, read, read_whole_features
+from analyzer import pw2wav, read_whole_features
 
 FILE_PATTERN = './data/matrix_sample/225/*a*/*bin'
 SPEAKERS = range(225,251)
-DATA_DIR = 'data/225/
+DATA_DIR = 'data/225/'
 
 def main():
     x = read_whole_features(DATA_DIR+'*a*/*bin')

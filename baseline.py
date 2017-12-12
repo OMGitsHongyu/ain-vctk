@@ -1,6 +1,9 @@
 import sys
-sys.path.remove('/home/hongyuz/.local/lib/python2.7/site-packages')
-sys.path.append('/home/hongyuz/.local/lib/python2.7/site-packages')
+try:
+    sys.path.remove('/home/hongyuz/.local/lib/python2.7/site-packages')
+    sys.path.append('/home/hongyuz/.local/lib/python2.7/site-packages')
+except ValueError:
+    pass
 import os
 import glob
 import numpy as np
@@ -8,6 +11,7 @@ import tensorflow as tf
 import tensorflow.contrib.slim as slim
 from analyzer import *
 import time
+import librosa
 import pdb
 
 def print_shape(t):
@@ -286,18 +290,23 @@ with tf.Session() as sess:
 
                 # now testing metrics
                 rand_idx = np.random.randint(len(data_test)-batch_size+1)
-                sample_inputs, sample_origs = read_pair_batch_numpy(\
-			data_test[rand_idx: rand_idx+batch_size], normalizer=normalizer)
+                sample_inputs, sample_origs, sample_inputs_other_fields, sample_origs_other_fields = read_pair_batch_numpy(\
+			        data_test[rand_idx: rand_idx+batch_size], normalizer=normalizer, mode='test')
 
                 sample = sess.run([gen_test], feed_dict={inputs: sample_inputs})
 
                 # err_im_HR = sess.run([err_im_HR_t], feed_dict={inputs:sample_inputs, real_ims:sample_origs})
 
-                test_summary = sess.run([merged_summary_test], feed_dict={inputs: sample_inputs, real_ims:sample_origs})
+                test_summary = sess.run([merged_summary_test], feed_dict={inputs:sample_inputs, real_ims:sample_origs})
                 test_writer.add_summary(test_summary[0], counter)
 
-#                 # save an image, with the original next to the generated one
-#                 resz_input = sample_inputs[0].repeat(axis=0,repeats=4).repeat(axis=1,repeats=4)
+                # save an waveform, with the original next to the generated one
+                resz_test_input = sample_inputs[0].reshape(-1,513)
+                # f0 conversion
+                sample_test_pw = convert_feature(resz_test_input, sample_inputs_other_fields[0], sample_inputs_other_fields[0,-1], 225,
+                         normalizer=normalizer)
+                test_file = os.path.splitext(data_test[0][:-3]).split('/')[-1]+'.wav'
+                librosa.write(sample_dir+test_file, pw2wav(sample_test_pw), sr=16000)
 #                 merge_im = np.zeros( (image_h, image_h*4, 3) )
 #                 merge_im[:, :image_h, :] = (sample_origs[0]+1)*127.5
 #                 merge_im[:, image_h:image_h*2, :] = (resz_input+1)*127.5

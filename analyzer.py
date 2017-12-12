@@ -293,11 +293,10 @@ def read_pair_single_numpy(filename, record_lines=256, normalizer=None, fields='
     ''' 
     '''
     input_with_label = np.fromfile(filename, np.float32).reshape(-1, 2*FEAT_DIM)
-    input_with_label_pad = np.zeros((record_lines,2*FEAT_DIM), np.float32)
     if input_with_label.shape[0] < record_lines:
-        input_with_label_pad[:input_with_label.shape[0],:] =\
-        input_with_label[:input_with_label.shape[0],:]
+        input_with_label_pad = input_with_label.copy()
     else:
+        input_with_label_pad = np.zeros((record_lines,2*FEAT_DIM), np.float32)
         input_with_label_pad[:record_lines,:] = input_with_label[:record_lines,:]
     if fields == 'sp':
         feature, label = input_with_label_pad[:,:SP_DIM], input_with_label_pad[:,FEAT_DIM:SP_DIM+FEAT_DIM]

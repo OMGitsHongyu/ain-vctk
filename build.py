@@ -1,6 +1,9 @@
 import sys
-sys.path.remove('/home/hongyuz/.local/lib/python2.7/site-packages')
-sys.path.append('/home/hongyuz/.local/lib/python2.7/site-packages')
+try:
+    sys.path.remove('/home/hongyuz/.local/lib/python2.7/site-packages')
+    sys.path.append('/home/hongyuz/.local/lib/python2.7/site-packages')
+except ValueError:
+    pass
 import numpy as np
 import pyworld as pw
 import tensorflow as tf

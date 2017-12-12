@@ -226,11 +226,11 @@ print "data test:", len(data_test)
 
 
 # create directories to save checkpoint and samples
-samples_dir = 'samples_pair_supervised'
+samples_dir = 'samples_pair_supervised/'
 if not os.path.exists(samples_dir):
     os.makedirs(samples_dir)
 
-checkpoint_dir = 'checkpoint_pair_supervised'
+checkpoint_dir = 'checkpoint_pair_supervised/'
 if not os.path.exists(checkpoint_dir):
     os.makedirs(checkpoint_dir)
 
@@ -301,12 +301,16 @@ with tf.Session() as sess:
                 test_writer.add_summary(test_summary[0], counter)
 
                 # save an waveform, with the original next to the generated one
-                resz_test_input = sample_inputs[0].reshape(-1,513)
+                resz_test_input = sample[0][0].reshape(-1,513)
                 # f0 conversion
-                sample_test_pw = convert_feature(resz_test_input, sample_inputs_other_fields[0], sample_inputs_other_fields[0,-1], 225,
+                sample_test_pw = convert_feature(resz_test_input, sample_inputs_other_fields[0], sample_inputs_other_fields[0,0,-1], 225,
                          normalizer=normalizer)
-                test_file = os.path.splitext(data_test[0][:-3]).split('/')[-1]+'.wav'
-                librosa.write(sample_dir+test_file, pw2wav(sample_test_pw), sr=16000)
+                test_file = os.path.splitext(data_test[rand_idx][:-3])[0].split('/')[-1]+'_'+str(counter)+'.wav'
+		print test_file
+	        try:
+                    librosa.output.write_wav(samples_dir+test_file, pw2wav(sample_test_pw), sr=16000)
+ 	        except librosa.util.exceptions.ParameterError:
+		    pass
 #                 merge_im = np.zeros( (image_h, image_h*4, 3) )
 #                 merge_im[:, :image_h, :] = (sample_origs[0]+1)*127.5
 #                 merge_im[:, image_h:image_h*2, :] = (resz_input+1)*127.5

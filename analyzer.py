@@ -76,13 +76,13 @@ def convert_f0(f0, src, trg):
     if isinstance(src, (list, tuple)):
         mu_s, std_s = src
     elif isinstance(src, (float, np.float32, int, np.int32, np.int64, str)):
-        mu_s, std_s = np.fromfile(os.path.join('./etc', '{}.npf'.format(src)), np.float32)
+        mu_s, std_s = np.fromfile(os.path.join('data/225/etc', '{}.npf'.format(int(src))), np.float32)
     else:
         raise TypeError('src must be numeric, string or tuple/list, got {}'.format(type(src)))
     if isinstance(trg, (list, tuple)):
         mu_t, std_t = trg
     elif isinstance(trg, (float, np.float32, int, np.int32, np.int64, str)):
-        mu_t, std_t = np.fromfile(os.path.join('./etc', '{}.npf'.format(trg)), np.float32)
+        mu_t, std_t = np.fromfile(os.path.join('data/225/etc', '{}.npf'.format(int(trg))), np.float32)
     else:
         raise TypeError('trg must be numeric string or tuple/list, got {}'.format(type(trg)))
     lf0 = np.where(f0 > 1., np.log(f0), f0)
@@ -94,7 +94,6 @@ def convert_feature(spec, other_feature, src, trg, normalizer=None):
     if normalizer:
         spec = normalizer.backward_process(spec)
     f0 = convert_f0(other_feature[:,-3], src, trg)
-    print other_feature[:,-3], f0
     return np.hstack((spec, other_feature[:,:-3], f0.reshape(-1,1), other_feature[:,-2].reshape(-1,1)))
 
 #------------------------save audios to binary files-----------------------------
@@ -327,10 +326,11 @@ def read_pair_batch_numpy(filenames, record_lines=256, normalizer=None, mode='tr
                                            normalizer=normalizer, fields='all')[0] for filename in filenames]
         batch_labels = [read_pair_single_numpy(filename, record_lines=record_lines, \
                                            normalizer=normalizer, fields='all')[1] for filename in filenames]
-        return np.expand_dims(np.array(batch_inputs[:,:,:SP_DIM]).astype(np.float32), axis=3),\
-                np.expand_dims(np.array(batch_labels[:,:,:SP_DIM]).astype(np.float32), axis=3),\
-                np.array(batch_inputs[:,:,SP_DIM:]).astype(np.float32),\
-                np.array(batch_labels[:,:,SP_DIM:]).astype(np.float32)
+	batch_inputs = np.array(batch_inputs).astype(np.float32)
+	batch_labels = np.array(batch_labels).astype(np.float32)
+        return np.expand_dims(batch_inputs[:,:,:SP_DIM], axis=3),\
+                np.expand_dims(batch_labels[:,:,:SP_DIM], axis=3),\
+                batch_inputs[:,:,SP_DIM:], batch_labels[:,:,SP_DIM:]
 
 #---------------------------alignments-------------------------------------------
 def read_whole_features(file_pattern, num_epochs=1):

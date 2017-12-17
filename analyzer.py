@@ -233,25 +233,18 @@ class Tanhize(object):
         x = (x - self.xmin) / self.xscale
         if isinstance(x, np.ndarray):
             return np.clip(x, 0., 1.) * 2. - 1.
-        elif isinstance(x, tf.tensor):
-            return tf.clip_by_value(x, 0., 1.) * 2. - 1.
         else:
-            raise TypeError('No such type {}'.format(type(x)))
+            try:
+                return tf.clip_by_value(x, 0., 1.) * 2. - 1.
+            except TypeError:
+                raise TypeError('No such type {}'.format(type(x)))
 
     def backward_process(self, x):
         return (x * .5 + .5) * self.xscale + self.xmin
 
 
-def read_pair(
-    file_pattern,
-    batch_size,
-    record_lines=128,
-    capacity=256,
-    min_after_dequeue=128,
-    num_threads=8,
-    format='NCHW',
-    normalizer=None,
-    ):
+def read_pair(file_pattern, batch_size, record_lines=256, capacity=512, min_after_dequeue=128,
+    num_threads=8, format='NCHW', normalizer=None):
     ''' 
     '''
     with tf.name_scope('InputSpectralFrame'):
@@ -285,7 +278,7 @@ def read_pair(
             capacity=capacity,
             min_after_dequeue=min_after_dequeue,
             num_threads=num_threads,
-            allow_smaller_final_batch=True,
+#             allow_smaller_final_batch=True,
             # enqueue_many=True,
             )
 
@@ -308,6 +301,7 @@ def read_pair_single_numpy(filename, record_lines=256, normalizer=None, fields='
         if normalizer:
             feature = np.hstack((normalizer.forward_process(feature[:,:SP_DIM]), feature[:,SP_DIM:]))
             label = np.hstack((normalizer.forward_process(label[:,:SP_DIM]), label[:,SP_DIM:]))
+    print feature.dtype
     return feature, label
 
 def read_pair_batch_numpy(filenames, record_lines=256, normalizer=None, mode='train'):

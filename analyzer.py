@@ -301,7 +301,6 @@ def read_pair_single_numpy(filename, record_lines=256, normalizer=None, fields='
         if normalizer:
             feature = np.hstack((normalizer.forward_process(feature[:,:SP_DIM]), feature[:,SP_DIM:]))
             label = np.hstack((normalizer.forward_process(label[:,:SP_DIM]), label[:,SP_DIM:]))
-    print feature.dtype
     return feature, label
 
 def read_pair_batch_numpy(filenames, record_lines=256, normalizer=None, mode='train'):
@@ -324,6 +323,20 @@ def read_pair_batch_numpy(filenames, record_lines=256, normalizer=None, mode='tr
         return np.expand_dims(batch_inputs[:,:,:SP_DIM], axis=3),\
                 np.expand_dims(batch_labels[:,:,:SP_DIM], axis=3),\
                 batch_inputs[:,:,SP_DIM:], batch_labels[:,:,SP_DIM:]
+
+def read_pair_single_numpy_test(filename, record_lines=256, normalizer=None):
+    ''' 
+    '''
+    input_with_label = np.fromfile(filename, np.float32).reshape(-1, 2*FEAT_DIM)
+    truncate_lines = (input_with_label.shape[0]/record_lines)*record_lines
+    input_with_label_truncated = input_with_label[:truncate_lines]
+    input_truncated, label_truncated = input_with_label_truncated[:,:FEAT_DIM],\
+                                       input_with_label_truncated[:,FEAT_DIM:]
+    if normalizer:
+        feature = np.hstack((normalizer.forward_process(input_truncated[:,:SP_DIM]), input_truncated[:,SP_DIM:]))
+    else:
+        feature = input_truncated
+    return input_truncated, label_truncated, feature
 
 #---------------------------alignments-------------------------------------------
 def read_whole_features(file_pattern, num_epochs=1):
